@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Sync today's Santander credit card movements into cumulus."""
+"""Sync today's Santander checking and credit card movements into cumulus."""
 
 from __future__ import annotations
 
@@ -11,15 +11,15 @@ from playwright.sync_api import sync_playwright
 from push import load_token, push
 from santander.auth import login
 from santander.browser import launch_browser, save_debug_screenshot
-from santander.navigate import go_to_credit_card_movements
-from santander.parse import parse_table_rows, today_chile
+from santander.navigate import go_to_checking_movements, go_to_credit_card_movements
+from santander.parse import merge_movements, parse_table_rows, today_chile
 from santander.scrape import extract_movement_rows
 
 
 def preview_movements(movements: list[dict]) -> None:
     print(f"\nToday's movements ({today_chile().isoformat()}):\n")
     if not movements:
-        print("  (none found on the current page)")
+        print("  (none found)")
         return
     for idx, movement in enumerate(movements, start=1):
         kind = "credit" if movement.get("is_credit") else "expense"
@@ -43,17 +43,26 @@ def run_sync(*, headless: bool, dry_run: bool, confirm: bool, inspect: bool) -> 
         try:
             print("Logging in to Santander...")
             page = login(page)
+
+            print("Navigating to checking account movements...")
+            go_to_checking_movements(page)
+            checking_rows = extract_movement_rows(page)
+            checking_movements = parse_table_rows(checking_rows)
+            print(f"  checking: {len(checking_movements)} today")
+
             print("Navigating to credit card movements...")
             go_to_credit_card_movements(page)
-            print("Scraping movements...")
+            card_rows = extract_movement_rows(page)
+            card_movements = parse_table_rows(card_rows)
+            print(f"  credit card: {len(card_movements)} today")
 
             if inspect:
-                print("\n--- page snapshot ---")
+                print("\n--- credit card page snapshot ---")
                 print(page.url)
                 print(page.locator("body").inner_text()[:4000])
                 print("--- end snapshot ---\n")
 
-            raw_rows = extract_movement_rows(page)
+            movements = merge_movements(checking_movements, card_movements)
         except Exception as exc:
             save_debug_screenshot(page)
             print(f"Sync failed: {exc}", file=sys.stderr)
@@ -62,7 +71,6 @@ def run_sync(*, headless: bool, dry_run: bool, confirm: bool, inspect: bool) -> 
         finally:
             browser.close()
 
-    movements = parse_table_rows(raw_rows)
     preview_movements(movements)
 
     if dry_run:
@@ -90,7 +98,7 @@ def run_sync(*, headless: bool, dry_run: bool, confirm: bool, inspect: bool) -> 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Log into Santander, scrape today's TC movements, push to cumulus"
+        description="Log into Santander, scrape today's account and TC movements, push to cumulus"
     )
     parser.add_argument(
         "--headless",

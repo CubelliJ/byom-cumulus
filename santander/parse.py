@@ -8,14 +8,15 @@ from zoneinfo import ZoneInfo
 
 CHILE_TZ = ZoneInfo("America/Santiago")
 
-DATE_RE = re.compile(r"(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})")
+DATE_RE = re.compile(r"(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2,4}))?")
 CLP_AMOUNT_RE = re.compile(
     r"(?:-\s*)?(?:\$?\s*)(\d{1,3}(?:\.\d{3})+(?:,\d+)?|\d{4,})"
 )
 
 SKIP_MERCHANT_RE = re.compile(
     r"\b(pago\s+(de\s+)?tarjeta|pago\s+tarjeta|pago\s+minimo|pago\s+deuda|"
-    r"cancelacion\s+deuda|abono\s+pago|saldo\s+inicial)\b",
+    r"cancelacion\s+deuda|abono\s+pago|saldo\s+inicial|"
+    r"traspaso\s+internet\s+a\s+t\.?\s*cr[eé]dito)\b",
     re.IGNORECASE,
 )
 CREDIT_MERCHANT_RE = re.compile(
@@ -29,18 +30,23 @@ def today_chile() -> date:
 
 
 def parse_chilean_date(raw: str, today: date | None = None) -> date | None:
-    match = DATE_RE.search(raw.strip())
+    today = today or today_chile()
+    match = DATE_RE.fullmatch(raw.strip()) or DATE_RE.search(raw.strip())
     if not match:
         return None
-    day, month, year = (int(match.group(1)), int(match.group(2)), int(match.group(3)))
-    if year < 100:
-        year += 2000
+    day, month = int(match.group(1)), int(match.group(2))
+    year_text = match.group(3)
+    if year_text:
+        year = int(year_text)
+        if year < 100:
+            year += 2000
+    else:
+        year = today.year
     try:
         parsed = date(year, month, day)
     except ValueError:
         return None
-    if today and parsed.year != today.year and len(match.group(3)) <= 2:
-        # Ambiguous dd/mm/yy around year boundaries.
+    if year_text and len(year_text) <= 2 and today and parsed.year != today.year:
         parsed = date(today.year, month, day)
     return parsed
 
@@ -66,6 +72,23 @@ def parse_clp_amount(raw: str) -> int | None:
     except ValueError:
         return None
     return -amount if negative else amount
+
+
+def _pick_movement_amount(
+    amount_hits: list[tuple[int, int, str]],
+) -> tuple[int, str, bool] | None:
+    signed_hits = [
+        (idx, amount, raw)
+        for idx, amount, raw in amount_hits
+        if "-" in raw or "+" in raw
+    ]
+    if signed_hits:
+        _, signed_amount, raw_amount_text = signed_hits[0]
+        return signed_amount, raw_amount_text, signed_amount > 0
+    if amount_hits:
+        _, signed_amount, raw_amount_text = amount_hits[0]
+        return signed_amount, raw_amount_text, signed_amount > 0
+    return None
 
 
 def classify_row(merchant: str, signed_amount: int, *, from_abono: bool) -> tuple[bool, bool]:
@@ -105,6 +128,8 @@ def row_to_movement(cells: list[str], today: date | None = None) -> dict | None:
 
     amount_hits: list[tuple[int, int, str]] = []
     for idx, cell in enumerate(cells[1:], start=1):
+        if "$" not in cell:
+            continue
         match = CLP_AMOUNT_RE.search(cell)
         if not match:
             continue
@@ -115,14 +140,11 @@ def row_to_movement(cells: list[str], today: date | None = None) -> dict | None:
     if not amount_hits:
         return None
 
-    if len(amount_hits) >= 2:
-        signed_amount, raw_amount_text = amount_hits[-1][1], amount_hits[-1][2]
-        from_abono = signed_amount > 0
-        amount = abs(signed_amount)
-    else:
-        signed_amount, raw_amount_text = amount_hits[0][1], amount_hits[0][2]
-        from_abono = signed_amount > 0
-        amount = abs(signed_amount)
+    picked = _pick_movement_amount(amount_hits)
+    if picked is None:
+        return None
+    signed_amount, raw_amount_text, from_abono = picked
+    amount = abs(signed_amount)
 
     amount_indices = {hit[0] for hit in amount_hits}
     merchant_parts = [
@@ -146,6 +168,19 @@ def row_to_movement(cells: list[str], today: date | None = None) -> dict | None:
     if is_credit:
         movement["is_credit"] = True
     return movement
+
+
+def merge_movements(*groups: list[dict]) -> list[dict]:
+    merged: list[dict] = []
+    seen: set[tuple[str, str, int]] = set()
+    for movements in groups:
+        for movement in movements:
+            key = (movement["date"], movement["merchant"], movement["amount"])
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(movement)
+    return merged
 
 
 def parse_table_rows(rows: list[list[str]], today: date | None = None) -> list[dict]:
