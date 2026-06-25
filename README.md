@@ -9,6 +9,7 @@ Credentials stay on your machine. cumulus only receives movement rows you push v
 | Bank | Script | Accounts | Entry URL |
 |------|--------|----------|-----------|
 | Santander Chile | `sync_santander.py` | Cuenta corriente + tarjeta de crédito | [banco.santander.cl/personas](https://banco.santander.cl/personas) |
+| Banco Edwards | `sync_edwards.py` | Cuenta corriente + tarjeta de crédito | [login.portales.bancochile.cl/login](https://login.portales.bancochile.cl/login) |
 | Banco Consorcio | `sync_consorcio.py` | Cuenta corriente (Cuenta Más) | [sitio.consorcio.cl/home](https://sitio.consorcio.cl/home) |
 
 Each sync filters to **today's movements** in `America/Santiago`, then POSTs to cumulus. Deduping happens on the server (date + amount + merchant).
@@ -32,6 +33,10 @@ CUMULUS_API_KEY=cmr_...
 SANTANDER_RUT=12345678-9
 SANTANDER_PASSWORD=...
 
+# Edwards (Banco de Chile portal)
+EDWARDS_RUT=12345678-9
+EDWARDS_PASSWORD=...
+
 # Consorcio
 CONSORCIO_RUT=12345678-9
 CONSORCIO_PASSWORD=...
@@ -47,6 +52,14 @@ CONSORCIO_PASSWORD=...
 .venv/bin/python sync_santander.py --dry-run    # preview only
 .venv/bin/python sync_santander.py --confirm  # ask before push
 .venv/bin/python sync_santander.py            # auto-push
+```
+
+### Banco Edwards (checking + credit card)
+
+```bash
+.venv/bin/python sync_edwards.py --dry-run
+.venv/bin/python sync_edwards.py --confirm
+.venv/bin/python sync_edwards.py
 ```
 
 ### Consorcio (checking)
@@ -86,8 +99,10 @@ Rows outside your household period may show as **Out of period** but still appea
 ```
 push.py                 # cumulus API client + CLI
 sync_santander.py       # Santander orchestration
+sync_edwards.py         # Banco Edwards orchestration
 sync_consorcio.py       # Consorcio orchestration
 santander/              # auth, navigate, scrape, parse
+edwards/                # auth, navigate, scrape, parse
 consorcio/              # auth, navigate, scrape, parse
 ```
 

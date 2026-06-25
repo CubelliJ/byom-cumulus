@@ -71,6 +71,7 @@ Use a throwaway script or `playwright` REPL with **headed** browser and real cre
 | Bank | Entry | Login quirks |
 |------|-------|--------------|
 | Santander | `banco.santander.cl/personas` → Ingresar iframe | `#rut`, `#pass`, INGRESAR; wait for `mibanco.santander.cl` + `¡Hola,` |
+| Edwards | `login.portales.bancochile.cl/login` | RUT placeholder + password; `press_sequentially`; dismiss `#modal_emergente_close` promo on home |
 | Consorcio | `sitio.consorcio.cl/home` → Sucursal Virtual | `#input-rut`, `#input-new-pass`; use `press_sequentially` (not `fill`) so RUT mask enables `#btn-login` |
 
 Dismiss cookie/banner modals (`Entiendo`, `Aceptar`) before clicking.
@@ -83,6 +84,8 @@ Prefer **direct post-login URLs** when the SPA hash route is stable:
 
 - Santander checking: `#/private/saldos/main/movimientos`
 - Santander TC (unbilled): `#/private/Saldos_TC/main/bill`
+- Edwards checking: `portalpersonas.bancochile.cl/.../personaBEC/index.html#/movimientos/cuenta/saldos-movimientos/`
+- Edwards TC (unbilled): `.../personaBEC/index.html#/tarjeta-credito/consultar/saldos`
 - Consorcio checking: `personas.consorcio.cl/.../ultimos-movimientos`
 
 Use menu clicking only when URLs are unstable. If a side menu stays open and intercepts clicks, navigate by URL instead of fighting overlays.
@@ -145,6 +148,14 @@ Quick parser unit tests can live inline or in a small script; no test suite requ
 - Scrapes **both** checking and credit card in one session.
 - Merges with `merge_movements()`; dedupes locally before push.
 - TC path: movimientos por facturar (unbilled).
+
+### Banco Edwards (`sync_edwards.py`)
+
+- Logs in via `login.portales.bancochile.cl` → `portalpersonas.bancochile.cl` (personaBEC shell).
+- Scrapes **both** checking and credit card in one session.
+- Checking table: date, description, channel, cargos, abono, saldo.
+- TC table: unbilled national movements (cargo column); skips pago (card payment) rows.
+- Dismiss promo modal via hidden `#modal_emergente_close` after login.
 
 ### Consorcio (`sync_consorcio.py`)
 
