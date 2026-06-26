@@ -1,4 +1,4 @@
-# byom-finsonal
+# byom-cumulus
 
 Bring Your Own Movements (BYOM) clients that scrape today's bank transactions locally and push them to [cumulus](https://trycumulus.com) for review and import.
 
@@ -17,7 +17,7 @@ Each sync filters to **today's movements** in `America/Santiago`, then POSTs to 
 ## Setup
 
 ```bash
-python3 -m venv .venv
+python3.12 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 playwright install chromium
@@ -70,6 +70,15 @@ CONSORCIO_PASSWORD=...
 .venv/bin/python sync_consorcio.py
 ```
 
+### All banks
+
+```bash
+.venv/bin/python sync_all.py              # Santander → Edwards → Consorcio, auto-push
+.venv/bin/python sync_all.py --dry-run    # preview all, no push
+```
+
+cumulus dedupes on every push (`date` + `amount` + `merchant`), so re-running every few hours only appends new movements. Repeats show up as `skipped duplicates` in the output.
+
 ### Manual push (no browser)
 
 ```bash
@@ -101,6 +110,7 @@ push.py                 # cumulus API client + CLI
 sync_santander.py       # Santander orchestration
 sync_edwards.py         # Banco Edwards orchestration
 sync_consorcio.py       # Consorcio orchestration
+sync_all.py             # all banks in sequence
 santander/              # auth, navigate, scrape, parse
 edwards/                # auth, navigate, scrape, parse
 consorcio/              # auth, navigate, scrape, parse
@@ -131,11 +141,36 @@ Movement payload (minimal):
 
 ## Scheduling (optional)
 
+Runs every **4 hours** at 00:00, 04:00, 08:00, 12:00, 16:00, and 20:00 **Chile time** (`America/Santiago`). cumulus dedupes repeats, so only new movements are appended.
+
+**macOS (launchd):**
+
 ```bash
-# example: daily at 9pm Chile time
-0 21 * * * cd /path/to/byom-finsonal && .venv/bin/python sync_santander.py
-0 21 * * * cd /path/to/byom-finsonal && .venv/bin/python sync_consorcio.py
+chmod +x scripts/install_launchd.sh scripts/run_sync_all.sh
+./scripts/install_launchd.sh
 ```
+
+Logs go to `logs/sync-YYYY-MM-DD.log`. Uninstall:
+
+```bash
+launchctl bootout gui/$(id -u)/com.byom-finsonal.sync
+rm ~/Library/LaunchAgents/com.byom-finsonal.sync.plist
+```
+
+**Manual one-off (or cron):**
+
+```bash
+./scripts/run_sync_all.sh
+```
+
+Cron example (every 4 hours, Chile TZ):
+
+```bash
+0 0,4,8,12,16,20 * * * TZ=America/Santiago cd /path/to/byom-finsonal && ./scripts/run_sync_all.sh
+```
+
+Requires a logged-in Mac session — Playwright runs headed Chromium and banks often block headless automation.
+
 
 ## Security
 
