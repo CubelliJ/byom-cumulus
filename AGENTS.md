@@ -1,6 +1,6 @@
-# Agent guide — byom-finsonal
+# Agent guide — byom-cumulus
 
-This repo implements **Bring Your Own Movements** for [cumulus](https://trycumulus.com): local Playwright scrapers per Chilean bank, a shared push client, and a consistent “today only → preview → cumulus” flow.
+This repository implements **Bring Your Own Movements** for [cumulus](https://trycumulus.com): local Playwright scrapers per Chilean bank, a shared push client, and a consistent “today only → preview → cumulus” flow.
 
 Read this before adding a bank, fixing a broken scraper, or refactoring shared code.
 

@@ -153,8 +153,8 @@ chmod +x scripts/install_launchd.sh scripts/run_sync_all.sh
 Logs go to `logs/sync-YYYY-MM-DD.log`. Uninstall:
 
 ```bash
-launchctl bootout gui/$(id -u)/com.byom-finsonal.sync
-rm ~/Library/LaunchAgents/com.byom-finsonal.sync.plist
+launchctl bootout gui/$(id -u)/com.byom-cumulus.sync
+rm ~/Library/LaunchAgents/com.byom-cumulus.sync.plist
 ```
 
 **Manual one-off (or cron):**
@@ -166,7 +166,7 @@ rm ~/Library/LaunchAgents/com.byom-finsonal.sync.plist
 Cron example (every 4 hours, Chile TZ):
 
 ```bash
-0 0,4,8,12,16,20 * * * TZ=America/Santiago cd /path/to/byom-finsonal && ./scripts/run_sync_all.sh
+0 0,4,8,12,16,20 * * * TZ=America/Santiago cd /path/to/byom-cumulus && ./scripts/run_sync_all.sh
 ```
 
 Requires a logged-in Mac session — Playwright runs headed Chromium and banks often block headless automation.
