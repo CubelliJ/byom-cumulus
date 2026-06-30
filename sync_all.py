@@ -11,6 +11,9 @@ from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from common.browser import BrowserMode, add_browser_args, browser_mode_from_args
+from common.cli import add_date_filter_args, date_filter_from_args
+
 CHILE_TZ = ZoneInfo("America/Santiago")
 ROOT = Path(__file__).resolve().parent
 PYTHON = ROOT / ".venv" / "bin" / "python"
@@ -32,13 +35,21 @@ def run_bank(
     script: str,
     *,
     dry_run: bool,
-    headless: bool,
+    mode: BrowserMode,
+    last_month: bool,
+    since: str | None,
 ) -> dict:
     cmd = [str(PYTHON), str(ROOT / script)]
     if dry_run:
         cmd.append("--dry-run")
-    if headless:
+    if mode == "headfull":
+        cmd.append("--headfull")
+    elif mode == "headless":
         cmd.append("--headless")
+    if last_month:
+        cmd.append("--last-month")
+    if since:
+        cmd.extend(["--since", since])
 
     print(f"\n{'=' * 60}")
     print(name)
@@ -108,21 +119,27 @@ def main() -> None:
         action="store_true",
         help="Scrape and preview only; never push",
     )
-    parser.add_argument(
-        "--headless",
-        action="store_true",
-        help="Run browsers headless (often blocked by banks)",
-    )
+    add_browser_args(parser)
+    add_date_filter_args(parser)
     args = parser.parse_args()
 
     if not PYTHON.is_file():
         print(f"Missing venv python at {PYTHON}", file=sys.stderr)
         sys.exit(1)
 
+    mode = browser_mode_from_args(args)
+    since = args.since.isoformat() if args.since else None
     results: list[dict] = []
     for name, script in BANKS:
         results.append(
-            run_bank(name, script, dry_run=args.dry_run, headless=args.headless)
+            run_bank(
+                name,
+                script,
+                dry_run=args.dry_run,
+                mode=mode,
+                last_month=args.last_month,
+                since=since,
+            )
         )
 
     sys.exit(print_summary(results, dry_run=args.dry_run))

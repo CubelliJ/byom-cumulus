@@ -2,10 +2,6 @@
 
 from __future__ import annotations
 
-from playwright.sync_api import Page
+from common.scrape import extract_table_rows as extract_movement_rows
 
-from santander.scrape import EXTRACT_TABLE_ROWS_JS
-
-
-def extract_movement_rows(page: Page) -> list[list[str]]:
-    return page.evaluate(EXTRACT_TABLE_ROWS_JS)
+__all__ = ["extract_movement_rows"]

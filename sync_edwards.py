@@ -10,35 +10,24 @@ from playwright.sync_api import sync_playwright
 
 from edwards.auth import login
 from edwards.navigate import go_to_checking_movements, go_to_credit_card_movements
-from edwards.parse import merge_movements, parse_card_rows, parse_checking_rows, today_chile
+from edwards.parse import parse_card_rows, parse_checking_rows
 from edwards.scrape import extract_movement_rows
 from push import load_token, push
-from santander.browser import launch_browser, save_debug_screenshot
+from common.browser import BrowserMode, add_browser_args, browser_mode_from_args, launch_browser, save_debug_screenshot
+from common.cli import add_date_filter_args, confirm_push, date_filter_from_args, preview_movements
+from common.parse import DateFilter, merge_movements
 
 
-def preview_movements(movements: list[dict]) -> None:
-    print(f"\nToday's movements ({today_chile().isoformat()}):\n")
-    if not movements:
-        print("  (none found)")
-        return
-    for idx, movement in enumerate(movements, start=1):
-        kind = "credit" if movement.get("is_credit") else "expense"
-        print(
-            f"  {idx}. {movement['date']}  {movement['merchant'][:50]:<50}  "
-            f"${movement['amount']:,}  ({kind})"
-        )
-
-
-def confirm_push(count: int) -> bool:
-    if count == 0:
-        return False
-    answer = input(f"\nPush {count} movement(s) to cumulus? [y/N] ").strip().lower()
-    return answer in {"y", "yes"}
-
-
-def run_sync(*, headless: bool, dry_run: bool, confirm: bool, inspect: bool) -> None:
+def run_sync(
+    *,
+    mode: BrowserMode,
+    dry_run: bool,
+    confirm: bool,
+    inspect: bool,
+    date_filter: DateFilter,
+) -> None:
     with sync_playwright() as playwright:
-        browser, context = launch_browser(playwright, headless=headless)
+        browser, context = launch_browser(playwright, mode=mode)
         page = context.new_page()
         try:
             print("Logging in to Banco Edwards...")
@@ -47,14 +36,14 @@ def run_sync(*, headless: bool, dry_run: bool, confirm: bool, inspect: bool) -> 
             print("Navigating to checking account movements...")
             go_to_checking_movements(page)
             checking_rows = extract_movement_rows(page)
-            checking_movements = parse_checking_rows(checking_rows)
-            print(f"  checking: {len(checking_movements)} today")
+            checking_movements = parse_checking_rows(checking_rows, date_filter=date_filter)
+            print(f"  checking: {len(checking_movements)} matched")
 
             print("Navigating to credit card movements...")
             go_to_credit_card_movements(page)
             card_rows = extract_movement_rows(page)
-            card_movements = parse_card_rows(card_rows)
-            print(f"  credit card: {len(card_movements)} today")
+            card_movements = parse_card_rows(card_rows, date_filter=date_filter)
+            print(f"  credit card: {len(card_movements)} matched")
 
             if inspect:
                 print("\n--- credit card page snapshot ---")
@@ -71,7 +60,7 @@ def run_sync(*, headless: bool, dry_run: bool, confirm: bool, inspect: bool) -> 
         finally:
             browser.close()
 
-    preview_movements(movements)
+    preview_movements(movements, date_filter=date_filter)
 
     if dry_run:
         print("\nDry run — nothing pushed.")
@@ -104,11 +93,6 @@ def main() -> None:
         )
     )
     parser.add_argument(
-        "--headless",
-        action="store_true",
-        help="Run browser headless (may be blocked by the bank)",
-    )
-    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Scrape and preview only; never push",
@@ -123,13 +107,16 @@ def main() -> None:
         action="store_true",
         help="Print page text after navigation (for tuning selectors)",
     )
+    add_browser_args(parser)
+    add_date_filter_args(parser)
     args = parser.parse_args()
 
     run_sync(
-        headless=args.headless,
+        mode=browser_mode_from_args(args),
         dry_run=args.dry_run,
         confirm=args.confirm,
         inspect=args.inspect,
+        date_filter=date_filter_from_args(args),
     )
 
 

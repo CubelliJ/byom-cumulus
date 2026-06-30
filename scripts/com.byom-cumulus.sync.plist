@@ -6,8 +6,9 @@
   <string>com.byom-cumulus.sync</string>
   <key>ProgramArguments</key>
   <array>
-    <string>/bin/bash</string>
-    <string>REPLACE_WITH_REPO_PATH/scripts/run_sync_all.sh</string>
+    <string>/usr/bin/osascript</string>
+    <string>-e</string>
+    <string>do shell script "/bin/bash REPLACE_WITH_REPO_PATH/scripts/run_sync_all.sh"</string>
   </array>
   <key>StartCalendarInterval</key>
   <array>

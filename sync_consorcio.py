@@ -8,38 +8,26 @@ import sys
 
 from playwright.sync_api import sync_playwright
 
+from push import load_token, push
+from common.browser import BrowserMode, add_browser_args, browser_mode_from_args, launch_browser, save_debug_screenshot
+from common.cli import add_date_filter_args, confirm_push, date_filter_from_args, preview_movements
+from common.parse import DateFilter
 from consorcio.auth import login
 from consorcio.navigate import go_to_account_movements
 from consorcio.parse import parse_movement_rows
 from consorcio.scrape import extract_movement_rows
-from push import load_token, push
-from santander.browser import launch_browser, save_debug_screenshot
-from santander.parse import today_chile
 
 
-def preview_movements(movements: list[dict]) -> None:
-    print(f"\nToday's movements ({today_chile().isoformat()}):\n")
-    if not movements:
-        print("  (none found on the current page)")
-        return
-    for idx, movement in enumerate(movements, start=1):
-        kind = "credit" if movement.get("is_credit") else "expense"
-        print(
-            f"  {idx}. {movement['date']}  {movement['merchant'][:50]:<50}  "
-            f"${movement['amount']:,}  ({kind})"
-        )
-
-
-def confirm_push(count: int) -> bool:
-    if count == 0:
-        return False
-    answer = input(f"\nPush {count} movement(s) to cumulus? [y/N] ").strip().lower()
-    return answer in {"y", "yes"}
-
-
-def run_sync(*, headless: bool, dry_run: bool, confirm: bool, inspect: bool) -> None:
+def run_sync(
+    *,
+    mode: BrowserMode,
+    dry_run: bool,
+    confirm: bool,
+    inspect: bool,
+    date_filter: DateFilter,
+) -> None:
     with sync_playwright() as playwright:
-        browser, context = launch_browser(playwright, headless=headless)
+        browser, context = launch_browser(playwright, mode=mode)
         page = context.new_page()
         try:
             print("Logging in to Consorcio...")
@@ -63,8 +51,12 @@ def run_sync(*, headless: bool, dry_run: bool, confirm: bool, inspect: bool) -> 
         finally:
             browser.close()
 
-    movements = parse_movement_rows(raw_rows)
-    preview_movements(movements)
+    movements = parse_movement_rows(raw_rows, date_filter=date_filter)
+    preview_movements(
+        movements,
+        date_filter=date_filter,
+        empty_message="(none found on the current page)",
+    )
 
     if dry_run:
         print("\nDry run — nothing pushed.")
@@ -94,11 +86,6 @@ def main() -> None:
         description="Log into Consorcio, scrape today's account movements, push to cumulus"
     )
     parser.add_argument(
-        "--headless",
-        action="store_true",
-        help="Run browser headless (may be blocked by Consorcio)",
-    )
-    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Scrape and preview only; never push",
@@ -113,13 +100,16 @@ def main() -> None:
         action="store_true",
         help="Print page text after navigation (for tuning selectors)",
     )
+    add_browser_args(parser)
+    add_date_filter_args(parser)
     args = parser.parse_args()
 
     run_sync(
-        headless=args.headless,
+        mode=browser_mode_from_args(args),
         dry_run=args.dry_run,
         confirm=args.confirm,
         inspect=args.inspect,
+        date_filter=date_filter_from_args(args),
     )
 
 

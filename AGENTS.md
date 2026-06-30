@@ -17,13 +17,15 @@ sync_<bank>.py          # CLI, browser lifecycle, preview, push
   scrape.py             # DOM → raw rows (list[list[str]])
   parse.py              # raw rows → cumulus movement dicts
 push.py                 # cumulus API (shared)
-santander/browser.py    # shared Playwright launch + debug screenshots
-santander/parse.py      # shared CLP/date parsing (reused by Consorcio)
+common/browser.py       # shared Playwright launch + debug screenshots
+common/parse.py         # shared CLP/date parsing
+common/scrape.py        # shared HTML table extraction (Santander, Edwards)
+common/cli.py           # shared preview + confirm helpers for sync_*.py
 ```
 
 **Orchestrator pattern** (every `sync_*.py` should follow this):
 
-1. Launch headed Chromium (banks often block headless).
+1. Launch Chromium in **unattended** mode (off-screen headed; banks block true headless).
 2. `login(page)` — credentials from `.env`, return authenticated `page`.
 3. Navigate → `extract_movement_rows(page)` → `parse_*_rows(...)`.
 4. Filter to **today** in `America/Santiago`.
@@ -31,7 +33,7 @@ santander/parse.py      # shared CLP/date parsing (reused by Consorcio)
 6. Unless `--dry-run`: `push(movements)` via `push.py`.
 7. On failure: `save_debug_screenshot(page)` → `debug/last-failure.png`.
 
-Keep bank-specific logic in `<bank>/`. Do not put Santander selectors in Consorcio files.
+Keep bank-specific logic in `<bank>/`. Do not put Santander selectors in Consorcio files. Shared utilities belong in `common/` or top-level modules like `push.py` — not under a bank package.
 
 ## cumulus contract
 
@@ -56,7 +58,7 @@ Dedup on server: same `date` + `amount` + `merchant` → `push_skipped_duplicate
 
 ### 1. Explore before coding
 
-Use a throwaway script or `playwright` REPL with **headed** browser and real credentials from `.env`:
+Use a throwaway script or `playwright` REPL with **`--headfull`** browser and real credentials from `.env`:
 
 1. Start at the bank’s **public entry URL** (not deep links unless login session exists).
 2. Record login selectors (`#rut`, `#pass`, submit button quirks).
@@ -96,12 +98,14 @@ Return `list[list[str]]` — one inner list per movement, cells as displayed.
 
 Implementations:
 
-- **HTML tables** (`<table>`) — Santander; use generic row extraction in `santander/scrape.py`.
+- **HTML tables** (`<table>`) — Santander, Edwards; generic extraction in `common/scrape.py`.
 - **Web components** (`<cns-table>`) — Consorcio; flat div walk, chunk every 6 cells per row.
 
 Scraper should not parse dates or amounts; that belongs in `parse.py`.
 
-### 5. Parsing (shared rules in `santander/parse.py`)
+### 5. Parsing
+
+Shared rules live in `common/parse.py`:
 
 - **Today filter:** `today_chile()` using `ZoneInfo("America/Santiago")`.
 - **Dates:** `DD/MM/YYYY`, `DD/MM/YY`, or `DD/MM` (year inferred from today).
@@ -119,8 +123,9 @@ Every `sync_*.py` exposes the same flags:
 
 - `--dry-run` — no API call
 - `--confirm` — `y/N` before push
+- `--headfull` — visible browser (debugging / selector tuning)
+- `--headless` — true headless (often blocked; try on Linux servers)
 - `--inspect` — page text dump
-- `--headless` — optional; default is headed
 
 Default behavior: auto-push (cumulus dedupes). Use `--confirm` while tuning a new scraper.
 
@@ -137,7 +142,7 @@ Quick parser unit tests can live inline or in a small script; no test suite requ
 - Do not commit `.env`, tokens, or `debug/` screenshots with account data.
 - Do not use `networkidle` on bank SPAs — it hangs; use `domcontentloaded` + visible selectors.
 - Do not send classification hints until parsing is rock-solid.
-- Do not add headless-only flows without verifying the bank allows it.
+- Default browser mode is **unattended** (off-screen). Use `--headfull` while exploring selectors; `--headless` only if verified for that bank.
 - Do not expand scope in `push.py` beyond the BYOM API surface.
 
 ## Current bank details
@@ -168,11 +173,11 @@ Quick parser unit tests can live inline or in a small script; no test suite requ
 1. Copy the `consorcio/` layout to `<newbank>/`.
 2. Add `sync_<newbank>.py` mirroring existing orchestrators.
 3. Document entry URL and env vars (`NEWBANK_RUT`, `NEWBANK_PASSWORD`) in README.
-4. Explore login + movements page with headed Playwright first.
+4. Explore login + movements page with `--headfull` Playwright first.
 5. Ship with `--dry-run` only; enable default push after manual validation in cumulus review.
 
 ## Useful references
 
 - [cumulus BYOM blog post](https://trycumulus.com/blog/bring-your-own-movements)
 - cumulus API base: `https://api.trycumulus.com`
-- Playwright Python: headed Chromium, `press_sequentially` for masked inputs, `page.evaluate` for table extraction
+- Playwright Python: unattended/off-screen headed by default, `press_sequentially` for masked inputs, `page.evaluate` for table extraction

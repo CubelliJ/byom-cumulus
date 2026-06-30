@@ -88,12 +88,15 @@ cumulus dedupes on every push (`date` + `amount` + `merchant`), so re-running ev
 
 ### Flags (all sync scripts)
 
+Default browser mode is **unattended**: Chromium runs off-screen (no visible window). Banks often block true headless; this mode passes their checks without popping up a window.
+
 | Flag | Effect |
 |------|--------|
 | `--dry-run` | Scrape and print preview; never call cumulus |
 | `--confirm` | Prompt `y/N` before pushing |
 | `--inspect` | Dump page text after navigation (debug) |
-| `--headless` | Headless browser (often blocked by banks) |
+| `--headfull` | Show the browser window (debugging) |
+| `--headless` | True headless Chromium (often blocked by banks) |
 
 ## After you push
 
@@ -107,6 +110,10 @@ Rows outside your household period may show as **Out of period** but still appea
 
 ```
 push.py                 # cumulus API client + CLI
+common/browser.py       # shared Playwright launch + CLI browser flags
+common/parse.py         # shared CLP/date parsing
+common/scrape.py        # shared HTML table extraction
+common/cli.py           # shared preview + confirm helpers
 sync_santander.py       # Santander orchestration
 sync_edwards.py         # Banco Edwards orchestration
 sync_consorcio.py       # Consorcio orchestration
@@ -169,7 +176,9 @@ Cron example (every 4 hours, Chile TZ):
 0 0,4,8,12,16,20 * * * TZ=America/Santiago cd /path/to/byom-cumulus && ./scripts/run_sync_all.sh
 ```
 
-Requires a logged-in Mac session — Playwright runs headed Chromium and banks often block headless automation.
+Requires a logged-in Mac session. Scheduled runs use **unattended mode** by default: Chromium runs off-screen (banks block true headless). Use `--headfull` when tuning selectors.
+
+**Run from anywhere:** `install_launchd.sh` works no matter where you clone the repo. If the repo is on Desktop or Documents, macOS blocks launchd from executing scripts there directly — the installer uses `osascript` so scheduled runs still work in your user session.
 
 
 ## Security

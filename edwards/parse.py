@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from datetime import date
 
-from santander.parse import (
+from common.parse import (
+    DateFilter,
     classify_row,
     merge_movements,
     parse_chilean_date,
@@ -43,13 +44,19 @@ def _movement_from_parts(
     return movement
 
 
-def checking_row_to_movement(cells: list[str], today: date | None = None) -> dict | None:
+def checking_row_to_movement(
+    cells: list[str],
+    *,
+    today: date | None = None,
+    date_filter: DateFilter | None = None,
+) -> dict | None:
     if len(cells) < 5:
         return None
     today = today or today_chile()
+    date_filter = date_filter or DateFilter.today_only(today)
 
     parsed_date = parse_chilean_date(cells[0], today=today)
-    if parsed_date is None or parsed_date != today:
+    if parsed_date is None or not date_filter.allows(parsed_date):
         return None
 
     merchant = cells[1].strip()
@@ -75,13 +82,19 @@ def checking_row_to_movement(cells: list[str], today: date | None = None) -> dic
     return None
 
 
-def card_row_to_movement(cells: list[str], today: date | None = None) -> dict | None:
+def card_row_to_movement(
+    cells: list[str],
+    *,
+    today: date | None = None,
+    date_filter: DateFilter | None = None,
+) -> dict | None:
     if len(cells) < 6:
         return None
     today = today or today_chile()
+    date_filter = date_filter or DateFilter.today_only(today)
 
     parsed_date = parse_chilean_date(cells[0], today=today)
-    if parsed_date is None or parsed_date != today:
+    if parsed_date is None or not date_filter.allows(parsed_date):
         return None
 
     merchant = cells[2].strip() if len(cells) > 2 else ""
@@ -103,12 +116,19 @@ def card_row_to_movement(cells: list[str], today: date | None = None) -> dict | 
     )
 
 
-def parse_checking_rows(rows: list[list[str]], today: date | None = None) -> list[dict]:
-    today = today or today_chile()
+def parse_checking_rows(
+    rows: list[list[str]],
+    *,
+    date_filter: DateFilter | None = None,
+) -> list[dict]:
+    today = today_chile()
+    date_filter = date_filter or DateFilter.today_only(today)
     movements: list[dict] = []
     seen: set[tuple[str, str, int]] = set()
     for cells in rows:
-        movement = checking_row_to_movement(cells, today=today)
+        movement = checking_row_to_movement(
+            cells, today=today, date_filter=date_filter
+        )
         if not movement:
             continue
         key = (movement["date"], movement["merchant"], movement["amount"])
@@ -119,12 +139,17 @@ def parse_checking_rows(rows: list[list[str]], today: date | None = None) -> lis
     return movements
 
 
-def parse_card_rows(rows: list[list[str]], today: date | None = None) -> list[dict]:
-    today = today or today_chile()
+def parse_card_rows(
+    rows: list[list[str]],
+    *,
+    date_filter: DateFilter | None = None,
+) -> list[dict]:
+    today = today_chile()
+    date_filter = date_filter or DateFilter.today_only(today)
     movements: list[dict] = []
     seen: set[tuple[str, str, int]] = set()
     for cells in rows:
-        movement = card_row_to_movement(cells, today=today)
+        movement = card_row_to_movement(cells, today=today, date_filter=date_filter)
         if not movement:
             continue
         key = (movement["date"], movement["merchant"], movement["amount"])
@@ -136,8 +161,6 @@ def parse_card_rows(rows: list[list[str]], today: date | None = None) -> list[di
 
 
 __all__ = [
-    "merge_movements",
     "parse_card_rows",
     "parse_checking_rows",
-    "today_chile",
 ]
